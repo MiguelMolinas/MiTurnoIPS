@@ -1,0 +1,134 @@
+"""Handlers de Telegram y coordinación de búsquedas de turnos."""
+
+import asyncio
+import logging
+import os
+from collections.abc import Awaitable
+from typing import Any
+
+from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
+
+from exa_service import find_requirements
+from ips_mock import check_availability
+from openai_service import parse_user_request
+
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger(__name__)
+
+BACKGROUND_TASKS: dict[int, asyncio.Task[None]] = {}
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Presenta el bot al usuario."""
+    if update.message:
+        await update.message.reply_text(
+            "Hola, soy FilaCero. Escribime qué especialidad y clínica necesitás."
+        )
+
+
+async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ejecuta una búsqueda determinista sin llamar a OpenAI."""
+    await _handle_request(update, "pediatria en IPS Ingavi", use_ai=False)
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancela la búsqueda activa del chat."""
+    if not update.effective_chat or not update.message:
+        return
+    task = BACKGROUND_TASKS.pop(update.effective_chat.id, None)
+    if task:
+        task.cancel()
+        await update.message.reply_text("Búsqueda cancelada.")
+    else:
+        await update.message.reply_text("No hay una búsqueda activa.")
+
+
+async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Interpreta una solicitud normal del usuario."""
+    if update.message:
+        await _handle_request(update, update.message.text or "", use_ai=True)
+
+
+async def _handle_request(update: Update, text: str, use_ai: bool) -> None:
+    if not update.effective_chat or not update.message:
+        return
+
+    try:
+        request = parse_user_request(text) if use_ai else {
+            "especialidad": "Pediatría",
+            "clinica": "IPS Ingavi",
+        }
+        specialty = request.get("especialidad")
+        clinic = request.get("clinica")
+        if not specialty or not clinic:
+            await update.message.reply_text(
+                "Necesito una especialidad y una clínica para buscar el turno."
+            )
+            return
+
+        availability = await check_availability(specialty, clinic)
+        if availability:
+            await update.message.reply_text(_format_appointment(availability))
+            return
+
+        await update.message.reply_text(
+            f"No hay turnos ahora. Voy a buscar {specialty} en {clinic} en segundo plano."
+        )
+        chat_id = update.effective_chat.id
+        old_task = BACKGROUND_TASKS.pop(chat_id, None)
+        if old_task:
+            old_task.cancel()
+        BACKGROUND_TASKS[chat_id] = asyncio.create_task(
+            _watch_availability(chat_id, specialty, clinic, update.get_bot())
+        )
+    except Exception:
+        LOGGER.exception("Error procesando la solicitud")
+        await update.message.reply_text("No pude procesar la solicitud. Probá de nuevo.")
+
+
+async def _watch_availability(chat_id: int, specialty: str, clinic: str, bot: Any) -> None:
+    try:
+        while True:
+            await asyncio.sleep(5)
+            availability = await check_availability(specialty, clinic)
+            if availability:
+                await bot.send_message(chat_id, _format_appointment(availability))
+                return
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        LOGGER.exception("Error en la búsqueda de fondo para %s", chat_id)
+    finally:
+        BACKGROUND_TASKS.pop(chat_id, None)
+
+
+def _format_appointment(appointment: dict[str, str]) -> str:
+    return (
+        "¡Encontré un turno!\n"
+        f"Especialidad: {appointment['especialidad']}\n"
+        f"Clínica: {appointment['clinica']}\n"
+        f"Fecha: {appointment['fecha']} a las {appointment['hora']}"
+    )
+
+
+def build_application() -> Application:
+    """Construye la aplicación de Telegram."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("Falta TELEGRAM_BOT_TOKEN en el archivo .env")
+    application = ApplicationBuilder().token(token).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("demo", demo))
+    application.add_handler(CommandHandler("cancelar", cancel))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message))
+    return application
