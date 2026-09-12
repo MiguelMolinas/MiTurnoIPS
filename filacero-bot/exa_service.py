@@ -19,9 +19,9 @@ def find_requirements(query: str) -> list[dict[str, Any]]:
     results = Exa(api_key).search(
         query,
         type="auto",
-        num_results=3,
+        num_results=20,
         contents={"highlights": True},
-        exclude_domains=["IPS2.vercel.app"],
+        include_domains=["IPS2.vercel.app"],
     )
     return [
         {
