@@ -1,6 +1,4 @@
 # MiTurnoIPS
-# Mi_Turno_IPS
-*(Nombre provisional)*
 
 > **“Sin Telegram, el paciente tendría que quedarse esperando frente a una pantalla de IPS recargando la página. Gracias a estar en un canal de mensajería, el agente lo interrumpe solo cuando hay novedades y el usuario puede seguir con su día.”**
 
