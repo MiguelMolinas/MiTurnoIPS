@@ -1,4 +1,5 @@
 """
+<<<<<<< HEAD
 ips_mock.py
 Mock autocontenido
 
@@ -798,3 +799,79 @@ if __name__ == "__main__":
 
             if respuesta.get("disponible"):
                 break
+=======
+ips_mock.py (Versión Hackathon en Memoria)
+No requiere SQL. No requiere instalar nada.
+Simula la disponibilidad en memoria RAM para grabar la demo rápido.
+"""
+
+# Base de datos falsa en la memoria de Python
+solicitudes_db = {}
+contador_id = 1
+
+def crear_solicitud(chat_id, especialidad_nombre, clinica_nombre, nombre_usuario=None):
+    """Finge guardar la solicitud en una base de datos."""
+    global contador_id
+    
+    solicitudes_db[contador_id] = {
+        "chat_id": chat_id,
+        "especialidad": especialidad_nombre,
+        "clinica": clinica_nombre,
+        "estado": "BUSCANDO",
+        "intentos": 0
+    }
+    
+    id_actual = contador_id
+    contador_id += 1
+    
+    return {"ok": True, "solicitud_id": id_actual}
+
+
+def buscar_turno(solicitud_id):
+    """
+    Finge buscar un turno.
+    Al tercer intento (15 segundos de espera), mágicamente 'encuentra' uno.
+    """
+    if solicitud_id not in solicitudes_db:
+        return {"ok": False, "error": "Solicitud inexistente"}
+        
+    solicitud = solicitudes_db[solicitud_id]
+    
+    # Si el usuario la canceló
+    if solicitud["estado"] == "CANCELADO":
+        return {"ok": True, "cancelado": True, "disponible": False}
+        
+    solicitud["intentos"] += 1
+    
+    # ¡LA MAGIA DEL MOCK! Al 3er intento fingimos que alguien canceló su turno y se liberó.
+    if solicitud["intentos"] >= 3:
+        solicitud["estado"] = "ENCONTRADO"
+        return {
+            "ok": True,
+            "disponible": True,
+            "cancelado": False,
+            "especialidad": solicitud["especialidad"],
+            "clinica": solicitud["clinica"],
+            "fecha": "Viernes 18/09/2026", # Fecha ficticia para la demo
+            "hora": "08:00 AM"
+        }
+        
+    # Si aún no es el 3er intento, seguimos diciendo que no hay turno
+    return {
+        "ok": True,
+        "disponible": False,
+        "cancelado": False
+    }
+
+
+def cancelar_solicitud(chat_id):
+    """Busca la solicitud del usuario y la cancela."""
+    cancelado_exitoso = False
+    
+    for req_id, req in solicitudes_db.items():
+        if req["chat_id"] == chat_id and req["estado"] == "BUSCANDO":
+            req["estado"] = "CANCELADO"
+            cancelado_exitoso = True
+            
+    return {"ok": True, "cancelado": cancelado_exitoso}
+>>>>>>> 03b8a44 (Feature All)

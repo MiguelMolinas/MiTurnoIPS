@@ -6,8 +6,3 @@ __pycache__/
 .coverage
 .DS_Store
 .env
-
-AGENT.md
-ARQUITECHTURE.md
-MEMORY.md
-WORKFLOW.md
