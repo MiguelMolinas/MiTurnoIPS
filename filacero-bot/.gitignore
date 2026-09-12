@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 .DS_Store
+AGENT.md
+ARQUITECHTURE.md
+MEMORY.md
+WORKFLOW.md
